@@ -1,6 +1,6 @@
 // HeartbeatGlow - 鼓動波紋光エフェクト
 // Reactive Aura FX サブシステム
-// VRChat + Modular Avatar対応
+// VRChat + Modular Avatar完全対応
 
 using UnityEngine;
 using System.Collections;
@@ -10,11 +10,15 @@ using VRC.SDK3.Avatars.Components;
 using VRC.SDK3.Avatars.ScriptableObjects;
 #endif
 
+#if MA_VRCSDK3_AVATARS
+using nadena.dev.modular_avatar.core;
+#endif
+
 namespace ReactiveAuraFX.Core
 {
     /// <summary>
     /// 胸元に手を置く動作で鼓動のような波紋光が広がるエフェクト
-    /// VRChat Avatar 3.0対応、AutoFIX安全設計
+    /// VRChat Avatar 3.0 + Modular Avatar完全対応、AutoFIX安全設計
     /// </summary>
     [AddComponentMenu("ReactiveAuraFX/Effects/Heartbeat Glow Effect")]
     [System.Serializable]
@@ -69,15 +73,18 @@ namespace ReactiveAuraFX.Core
 
 #if MA_VRCSDK3_AVATARS
         [Space(10)]
-        [Header("🔗 Modular Avatar連携")]
+        [Header("🔗 Modular Avatar完全連携")]
         [Tooltip("Animatorパラメータで手動発動")]
         public bool useAnimatorTrigger = false;
         
         [Tooltip("発動トリガーパラメータ名")]
         public string triggerParameterName = "HeartbeatTrigger";
         
+        [Tooltip("エフェクト有効化パラメータ名")]
+        public string enableParameterName = "ReactiveAuraFX/HeartbeatGlow";
+        
         [Tooltip("手の位置をAnimatorから取得")]
-        public bool useAnimatorHandPositions = true;
+        public bool useAnimatorHandPositions = false;
         
         [Tooltip("左手パラメータ名（Vector3）")]
         public string leftHandParameterName = "LeftHandPosition";
@@ -89,6 +96,7 @@ namespace ReactiveAuraFX.Core
         // === 内部変数 ===
         private bool _isHeartbeatActive = false;
         private bool _isHandNearChest = false;
+        private bool _effectEnabled = true;
         private float _heartbeatPhase = 0f;
         private float _lastHeartbeatTime = 0f;
         private Coroutine _heartbeatCoroutine;
@@ -108,7 +116,9 @@ namespace ReactiveAuraFX.Core
 #if MA_VRCSDK3_AVATARS
         // Modular Avatar関連
         private Animator _avatarAnimator;
+        private VRCAvatarDescriptor _avatarDescriptor;
         private bool _lastTriggerValue = false;
+        private bool _lastEffectEnabledValue = true;
 #endif
 
         void Awake()
@@ -204,10 +214,15 @@ namespace ReactiveAuraFX.Core
             // Modular Avatar Animator検出
             if ((useAnimatorTrigger || useAnimatorHandPositions) && _avatarAnimator == null)
             {
-                var avatarDescriptor = FindObjectOfType<VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
-                if (avatarDescriptor != null)
+                _avatarDescriptor = GetComponentInParent<VRCAvatarDescriptor>();
+                if (_avatarDescriptor == null)
                 {
-                    _avatarAnimator = avatarDescriptor.GetComponent<Animator>();
+                    _avatarDescriptor = FindObjectOfType<VRCAvatarDescriptor>();
+                }
+                
+                if (_avatarDescriptor != null)
+                {
+                    _avatarAnimator = _avatarDescriptor.GetComponent<Animator>();
                 }
             }
 #endif
@@ -240,13 +255,18 @@ namespace ReactiveAuraFX.Core
                 UpdateAnimatorTrigger();
             }
             
+            if (_avatarAnimator != null)
+            {
+                UpdateEffectEnabledFromAnimator();
+            }
+            
             if (useAnimatorHandPositions && _avatarAnimator != null)
             {
                 UpdateAnimatorHandPositions();
             }
 #endif
             
-            if (chestTransform != null)
+            if (_effectEnabled && chestTransform != null)
             {
                 UpdateHandDetection();
                 UpdateHeartbeatEffect();
@@ -258,6 +278,21 @@ namespace ReactiveAuraFX.Core
         {
             try
             {
+                if (_avatarAnimator.parameters == null) return;
+                
+                // パラメータの存在チェック
+                bool paramExists = false;
+                foreach (var param in _avatarAnimator.parameters)
+                {
+                    if (param.name == triggerParameterName)
+                    {
+                        paramExists = true;
+                        break;
+                    }
+                }
+                
+                if (!paramExists) return;
+                
                 bool triggerValue = _avatarAnimator.GetBool(triggerParameterName);
                 
                 if (triggerValue && !_lastTriggerValue)
@@ -277,6 +312,39 @@ namespace ReactiveAuraFX.Core
             }
         }
 
+        private void UpdateEffectEnabledFromAnimator()
+        {
+            try
+            {
+                if (_avatarAnimator.parameters == null) return;
+                
+                // エフェクト有効化パラメータの存在チェック
+                bool paramExists = false;
+                foreach (var param in _avatarAnimator.parameters)
+                {
+                    if (param.name == enableParameterName)
+                    {
+                        paramExists = true;
+                        break;
+                    }
+                }
+                
+                if (!paramExists) return;
+                
+                bool effectEnabled = _avatarAnimator.GetBool(enableParameterName);
+                
+                if (effectEnabled != _lastEffectEnabledValue)
+                {
+                    _lastEffectEnabledValue = effectEnabled;
+                    SetEffectEnabled(effectEnabled);
+                }
+            }
+            catch (System.Exception)
+            {
+                // パラメータが存在しない場合は無視
+            }
+        }
+
         private void UpdateAnimatorHandPositions()
         {
             try
@@ -289,6 +357,8 @@ namespace ReactiveAuraFX.Core
                 if (_avatarAnimator.parameters != null)
                 {
                     // パラメータ値に基づいた処理をここに実装
+                    // 注：Vector3パラメータはVRChatでは直接サポートされていないため、
+                    // X, Y, Z成分を別々のfloatパラメータとして実装する必要があります
                 }
             }
             catch (System.Exception)
@@ -390,7 +460,7 @@ namespace ReactiveAuraFX.Core
 
         public void StartHeartbeatEffect()
         {
-            if (_isHeartbeatActive) return;
+            if (_isHeartbeatActive || !_effectEnabled) return;
             
             _isHeartbeatActive = true;
             _heartbeatPhase = 0f;
@@ -442,6 +512,19 @@ namespace ReactiveAuraFX.Core
         }
 
         /// <summary>
+        /// エフェクトの有効/無効を切り替え
+        /// </summary>
+        public void SetEffectEnabled(bool enabled)
+        {
+            _effectEnabled = enabled;
+            
+            if (!enabled && _isHeartbeatActive)
+            {
+                StopHeartbeatEffect();
+            }
+        }
+
+        /// <summary>
         /// 鼓動速度を設定
         /// </summary>
         public void SetHeartbeatSpeed(float speed)
@@ -474,6 +557,34 @@ namespace ReactiveAuraFX.Core
                 _particleMain.startColor = color;
             }
         }
+
+#if MA_VRCSDK3_AVATARS
+        /// <summary>
+        /// Modular Avatar統合のセットアップ
+        /// </summary>
+        [ContextMenu("Modular Avatar統合セットアップ")]
+        public void SetupModularAvatarIntegration()
+        {
+            if (_avatarDescriptor == null)
+            {
+                _avatarDescriptor = GetComponentInParent<VRCAvatarDescriptor>();
+                if (_avatarDescriptor == null)
+                {
+                    _avatarDescriptor = FindObjectOfType<VRCAvatarDescriptor>();
+                }
+            }
+            
+            if (_avatarDescriptor != null)
+            {
+                _avatarAnimator = _avatarDescriptor.GetComponent<Animator>();
+                Debug.Log("[ReactiveAuraFX] HeartbeatGlow Modular Avatar統合完了");
+            }
+            else
+            {
+                Debug.LogWarning("[ReactiveAuraFX] VRCAvatarDescriptorが見つかりません");
+            }
+        }
+#endif
 
         void OnDestroy()
         {

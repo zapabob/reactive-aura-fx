@@ -1,0 +1,181 @@
+ReactiveAuraFX セットアップガイド
+===================================
+
+## 必要なもの
+
+1. Unity 2022.3.6f1 以降
+2. VRChat Creator Companion (VCC)
+3. VRChat Avatar SDK
+4. 対応アバター（Humanoidリグ）
+
+## Step 1: プロジェクト準備
+
+1. VRChat Creator Companionで新しいアバタープロジェクトを作成
+2. ReactiveAuraFXパッケージをプロジェクトにインポート
+3. Assets/ReactiveAuraFX/フォルダが正常にインポートされていることを確認
+
+## Step 2: プレハブの配置
+
+1. Hierarchy上でアバターを選択
+2. Assets/ReactiveAuraFX/Prefabs/ReactiveAuraFX_System.prefabをドラッグ
+3. アバターの頭部ボーン（通常はHead）の子オブジェクトとして配置
+4. Position: (0, 0, 0), Rotation: (0, 0, 0), Scale: (1, 1, 1)に設定
+
+## Step 3: 参照位置の調整
+
+### VRChatReferences配下の設定：
+
+1. **LeftEyeReference**
+   - アバターの左目の位置に合わせて調整
+   - 標準位置: (-0.032, 1.6, 0.08)
+
+2. **RightEyeReference** 
+   - アバターの右目の位置に合わせて調整
+   - 標準位置: (0.032, 1.6, 0.08)
+
+3. **HeadReference**
+   - アバターの頭部中心に配置
+   - 標準位置: (0, 1.6, 0)
+
+## Step 4: VRCアバターディスクリプター設定
+
+1. アバターのVRC Avatar Descriptorを選択
+2. PlayableLayers > FX > Controller に新しいAnimatorControllerを設定
+3. Parameters リストに以下を追加：
+   - EmotionAura (Bool)
+   - HeartbeatGlow (Bool)  
+   - EyeFocusRay (Bool)
+   - LovePulse (Bool)
+   - IdleBloom (Bool)
+   - AuraIntensity (Float, 0-1)
+
+## Step 5: アニメーターコントローラー設定
+
+### FXレイヤー設定：
+
+1. 新しいAnimatorControllerを作成
+2. 以下のパラメータを追加：
+   ```
+   EmotionAura (Bool)
+   HeartbeatGlow (Bool)
+   EyeFocusRay (Bool)
+   LovePulse (Bool)
+   IdleBloom (Bool)
+   AuraIntensity (Float)
+   ```
+
+3. 各エフェクト用のAnimationClipを作成：
+
+### EmotionAura用アニメーション：
+```
+ReactiveAuraFX_System/Effects/EmotionAura_Effect
+  ├── GameObject.m_IsActive: 1
+  ├── ParticleSystem.emission.enabled: 1
+  └── Light.m_Enabled: 1
+```
+
+### HeartbeatGlow用アニメーション：
+```
+ReactiveAuraFX_System/Effects/HeartbeatGlow_Effect
+  ├── GameObject.m_IsActive: 1
+  ├── ParticleSystem.emission.enabled: 1
+  └── Light.m_Enabled: 1
+```
+
+（他のエフェクトも同様に設定）
+
+## Step 6: 表情メニュー設定
+
+1. VRC Menu を作成または既存のものを選択
+2. 以下のコントロールを追加：
+
+### Toggle Controls:
+- Name: "Emotion Aura", Parameter: EmotionAura
+- Name: "Heartbeat Glow", Parameter: HeartbeatGlow  
+- Name: "Eye Focus Ray", Parameter: EyeFocusRay
+- Name: "Love Pulse", Parameter: LovePulse
+- Name: "Idle Bloom", Parameter: IdleBloom
+
+### Radial Puppet Control:
+- Name: "Aura Intensity", Parameter: AuraIntensity
+
+## Step 7: エフェクトのカスタマイズ
+
+### 色の調整：
+1. Assets/ReactiveAuraFX/Materials/ のマテリアルを選択
+2. Main Color を調整してエフェクトの色を変更
+
+### サイズ調整：
+1. ReactiveAuraFX_System の Scale を調整
+2. 個別エフェクトのサイズ調整も可能
+
+### オーディオ設定：
+1. 各エフェクトのAudioSourceコンポーネントを調整
+2. Volume, Pitch, Spatial Blend を環境に合わせて設定
+
+## Step 8: テストとデバッグ
+
+1. Playモードでエフェクトの動作確認
+2. VRChat SDKのLocal Testing で動作テスト
+3. Build & Test でアップロード前の最終確認
+
+## Step 9: パフォーマンス最適化
+
+### 推奨設定：
+- 同時に有効にするエフェクトは3個以下
+- パーティクル数の調整（質 vs パフォーマンス）
+- LOD設定による距離別品質調整
+
+### パフォーマンスランク維持：
+- Good以上を維持するため、必要に応じて設定を調整
+- VRChat SDK の Performance Rank で確認
+
+## トラブルシューティング
+
+### エフェクトが表示されない場合：
+1. オブジェクトがアクティブになっているか確認
+2. マテリアルが正しく設定されているか確認
+3. シェーダーがVRChat対応かチェック
+
+### パフォーマンスが重い場合：
+1. パーティクル数を減らす
+2. 同時再生エフェクト数を制限
+3. エフェクトの更新頻度を調整
+
+### アニメーションが動作しない場合：
+1. Animatorパラメータが正しく設定されているか確認
+2. トランジション条件をチェック
+3. WriteDefaultsの設定を確認
+
+## 高度な設定
+
+### カスタムトリガー：
+- Expression Parameters でトリガー条件をカスタマイズ
+- OSC経由での外部制御も可能
+- Hand Gestureとの連動設定
+
+### エフェクト連鎖：
+- アニメーターで複数エフェクトの組み合わせ
+- タイムライン制御による演出
+- オーディオリアクティブ設定
+
+## 注意事項
+
+- VRChatのコミュニティガイドラインを遵守
+- 他のプレイヤーへの配慮（点滅エフェクトなど）
+- 著作権のあるオーディオ素材の使用禁止
+- アバターのポリゴン数制限に注意
+
+## サポート
+
+問題が解決しない場合は、以下を含めて報告してください：
+- Unity バージョン
+- VRChat SDK バージョン  
+- エラーログ（Console）
+- 使用アバター情報
+
+更新情報は README.txt を確認してください。
+
+---
+ReactiveAuraFX Project
+Updated: 2024 

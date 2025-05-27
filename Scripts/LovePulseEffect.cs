@@ -1,6 +1,6 @@
 // LovePulse - 愛情パーティクルエフェクト
 // Reactive Aura FX サブシステム
-// VRChat + Modular Avatar対応
+// VRChat + Modular Avatar完全対応
 
 using UnityEngine;
 using System.Collections;
@@ -11,11 +11,15 @@ using VRC.SDK3.Avatars.Components;
 using VRC.SDK3.Avatars.ScriptableObjects;
 #endif
 
+#if MA_VRCSDK3_AVATARS
+using nadena.dev.modular_avatar.core;
+#endif
+
 namespace ReactiveAuraFX.Core
 {
     /// <summary>
     /// 特定ユーザーとの距離と注視でハート型パーティクルとSEを発生させるエフェクト
-    /// VRChat Avatar 3.0対応、AutoFIX安全設計
+    /// VRChat Avatar 3.0 + Modular Avatar完全対応、AutoFIX安全設計
     /// </summary>
     [AddComponentMenu("ReactiveAuraFX/Effects/Love Pulse Effect")]
     [System.Serializable]
@@ -67,16 +71,20 @@ namespace ReactiveAuraFX.Core
 
 #if MA_VRCSDK3_AVATARS
         [Space(10)]
-        [Header("🔗 Modular Avatar連携")]
+        [Header("🔗 Modular Avatar完全連携")]
         [Tooltip("Animatorパラメータで手動発動")]
         public bool useAnimatorManualTrigger = false;
         
         [Tooltip("手動発動パラメータ名")]
         public string manualTriggerParameterName = "LovePulseTrigger";
+        
+        [Tooltip("エフェクト有効化パラメータ名")]
+        public string enableParameterName = "ReactiveAuraFX/LovePulse";
 #endif
 
         // === 内部変数 ===
         private bool _isLovePulseActive = false;
+        private bool _effectEnabled = true;
         private float _loveAccumulation = 0f;
         private List<Transform> _nearbyPlayers = new List<Transform>();
         private Transform _currentLoveTarget = null;
@@ -95,6 +103,14 @@ namespace ReactiveAuraFX.Core
         // エフェクトタイマー
         private float _pulseTimer = 0f;
         private float _nextPulseTime = 0f;
+
+#if MA_VRCSDK3_AVATARS
+        // Modular Avatar関連
+        private Animator _avatarAnimator;
+        private VRCAvatarDescriptor _avatarDescriptor;
+        private bool _lastManualTriggerValue = false;
+        private bool _lastEffectEnabledValue = true;
+#endif
 
         void Awake()
         {
@@ -162,6 +178,23 @@ namespace ReactiveAuraFX.Core
             {
                 loveAudioSource.loop = false;
             }
+
+#if MA_VRCSDK3_AVATARS
+            // Modular Avatar Animator検出
+            if (useAnimatorManualTrigger && _avatarAnimator == null)
+            {
+                _avatarDescriptor = GetComponentInParent<VRCAvatarDescriptor>();
+                if (_avatarDescriptor == null)
+                {
+                    _avatarDescriptor = FindObjectOfType<VRCAvatarDescriptor>();
+                }
+                
+                if (_avatarDescriptor != null)
+                {
+                    _avatarAnimator = _avatarDescriptor.GetComponent<Animator>();
+                }
+            }
+#endif
             
             Debug.Log("[ReactiveAuraFX] LovePulseEffect初期化完了");
         }
@@ -237,12 +270,94 @@ namespace ReactiveAuraFX.Core
 
         void Update()
         {
-            if (_playerCamera == null) return;
+#if MA_VRCSDK3_AVATARS
+            // Modular Avatar パラメータ監視
+            if (useAnimatorManualTrigger && _avatarAnimator != null)
+            {
+                UpdateAnimatorManualTrigger();
+            }
+            
+            if (_avatarAnimator != null)
+            {
+                UpdateEffectEnabledFromAnimator();
+            }
+#endif
+            
+            if (_playerCamera == null || !_effectEnabled) return;
             
             UpdateNearbyPlayersDetection();
             UpdateLoveAccumulation();
             UpdateLovePulseEffect();
         }
+
+#if MA_VRCSDK3_AVATARS
+        private void UpdateAnimatorManualTrigger()
+        {
+            try
+            {
+                if (_avatarAnimator.parameters == null) return;
+                
+                // パラメータの存在チェック
+                bool paramExists = false;
+                foreach (var param in _avatarAnimator.parameters)
+                {
+                    if (param.name == manualTriggerParameterName)
+                    {
+                        paramExists = true;
+                        break;
+                    }
+                }
+                
+                if (!paramExists) return;
+                
+                bool manualTriggerValue = _avatarAnimator.GetBool(manualTriggerParameterName);
+                
+                if (manualTriggerValue && !_lastManualTriggerValue)
+                {
+                    ManualTriggerLovePulse();
+                }
+                
+                _lastManualTriggerValue = manualTriggerValue;
+            }
+            catch (System.Exception)
+            {
+                // パラメータが存在しない場合は無視
+            }
+        }
+
+        private void UpdateEffectEnabledFromAnimator()
+        {
+            try
+            {
+                if (_avatarAnimator.parameters == null) return;
+                
+                // エフェクト有効化パラメータの存在チェック
+                bool paramExists = false;
+                foreach (var param in _avatarAnimator.parameters)
+                {
+                    if (param.name == enableParameterName)
+                    {
+                        paramExists = true;
+                        break;
+                    }
+                }
+                
+                if (!paramExists) return;
+                
+                bool effectEnabled = _avatarAnimator.GetBool(enableParameterName);
+                
+                if (effectEnabled != _lastEffectEnabledValue)
+                {
+                    _lastEffectEnabledValue = effectEnabled;
+                    SetEffectEnabled(effectEnabled);
+                }
+            }
+            catch (System.Exception)
+            {
+                // パラメータが存在しない場合は無視
+            }
+        }
+#endif
 
         private void UpdateNearbyPlayersDetection()
         {
@@ -309,7 +424,7 @@ namespace ReactiveAuraFX.Core
 
         private void TriggerLovePulse()
         {
-            if (_isLovePulseActive) return;
+            if (_isLovePulseActive || !_effectEnabled) return;
             
             _isLovePulseActive = true;
             _pulseTimer = 0f;
@@ -334,7 +449,7 @@ namespace ReactiveAuraFX.Core
                 loveAudioSource.PlayOneShot(loveActivationClip);
             }
             
-            Debug.Log($"[ReactiveAuraFX] LovePulse発動: {_currentLoveTarget.name}");
+            Debug.Log($"[ReactiveAuraFX] LovePulse発動: {_currentLoveTarget?.name ?? "Manual"}");
         }
 
         private void StopLovePulse()
@@ -412,6 +527,19 @@ namespace ReactiveAuraFX.Core
         }
 
         /// <summary>
+        /// エフェクトの有効/無効を切り替え
+        /// </summary>
+        public void SetEffectEnabled(bool enabled)
+        {
+            _effectEnabled = enabled;
+            
+            if (!enabled && _isLovePulseActive)
+            {
+                StopLovePulse();
+            }
+        }
+
+        /// <summary>
         /// 愛情色を設定
         /// </summary>
         public void SetLoveColor(Color color)
@@ -462,9 +590,39 @@ namespace ReactiveAuraFX.Core
         /// </summary>
         public void ManualTriggerLovePulse()
         {
+            if (!_effectEnabled) return;
+            
             _loveAccumulation = loveAccumulationTime;
             TriggerLovePulse();
         }
+
+#if MA_VRCSDK3_AVATARS
+        /// <summary>
+        /// Modular Avatar統合のセットアップ
+        /// </summary>
+        [ContextMenu("Modular Avatar統合セットアップ")]
+        public void SetupModularAvatarIntegration()
+        {
+            if (_avatarDescriptor == null)
+            {
+                _avatarDescriptor = GetComponentInParent<VRCAvatarDescriptor>();
+                if (_avatarDescriptor == null)
+                {
+                    _avatarDescriptor = FindObjectOfType<VRCAvatarDescriptor>();
+                }
+            }
+            
+            if (_avatarDescriptor != null)
+            {
+                _avatarAnimator = _avatarDescriptor.GetComponent<Animator>();
+                Debug.Log("[ReactiveAuraFX] LovePulse Modular Avatar統合完了");
+            }
+            else
+            {
+                Debug.LogWarning("[ReactiveAuraFX] VRCAvatarDescriptorが見つかりません");
+            }
+        }
+#endif
 
         void OnDrawGizmosSelected()
         {

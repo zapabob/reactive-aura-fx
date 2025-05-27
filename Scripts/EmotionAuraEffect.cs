@@ -1,6 +1,6 @@
 // EmotionAura - 表情連動オーラエフェクト
 // Reactive Aura FX サブシステム
-// VRChat + Modular Avatar対応
+// VRChat + Modular Avatar完全対応
 
 using UnityEngine;
 using System.Collections.Generic;
@@ -10,11 +10,15 @@ using VRC.SDK3.Avatars.Components;
 using VRC.SDK3.Avatars.ScriptableObjects;
 #endif
 
+#if MA_VRCSDK3_AVATARS
+using nadena.dev.modular_avatar.core;
+#endif
+
 namespace ReactiveAuraFX.Core
 {
     /// <summary>
     /// 表情に応じてオーラの色と形を変更するエフェクト
-    /// VRChat Avatar 3.0対応、AutoFIX安全設計
+    /// VRChat Avatar 3.0 + Modular Avatar完全対応、AutoFIX安全設計
     /// </summary>
     [AddComponentMenu("ReactiveAuraFX/Effects/Emotion Aura Effect")]
     [RequireComponent(typeof(ParticleSystem))]
@@ -43,12 +47,15 @@ namespace ReactiveAuraFX.Core
 
 #if MA_VRCSDK3_AVATARS
         [Space(10)]
-        [Header("🔗 Modular Avatar連携")]
+        [Header("🔗 Modular Avatar完全連携")]
         [Tooltip("Animatorパラメータから表情を検出")]
         public bool useAnimatorEmotionDetection = true;
         
         [Tooltip("表情パラメータ名")]
         public string emotionParameterName = "Emotion";
+        
+        [Tooltip("エフェクト有効化パラメータ名")]
+        public string enableParameterName = "ReactiveAuraFX/EmotionAura";
         
         [Tooltip("表情値マッピング")]
         public EmotionValueMapping[] emotionMappings = new EmotionValueMapping[]
@@ -76,6 +83,7 @@ namespace ReactiveAuraFX.Core
         private EmotionType _previousEmotion = EmotionType.Neutral;
         private float _transitionProgress = 0f;
         private bool _isTransitioning = false;
+        private bool _effectEnabled = true;
         
         // パーティクル設定
         private ParticleSystem.MainModule _mainModule;
@@ -91,6 +99,8 @@ namespace ReactiveAuraFX.Core
         // Modular Avatar関連
         private Animator _avatarAnimator;
         private int _lastEmotionParameterValue = 0;
+        private bool _lastEffectEnabledValue = true;
+        private VRCAvatarDescriptor _avatarDescriptor;
 #endif
 
         public enum EmotionType
@@ -183,10 +193,16 @@ namespace ReactiveAuraFX.Core
             // Modular Avatar Animator検出
             if (useAnimatorEmotionDetection && _avatarAnimator == null)
             {
-                var avatarDescriptor = FindObjectOfType<VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
-                if (avatarDescriptor != null)
+                // 親オブジェクトからVRCAvatarDescriptorを検索
+                _avatarDescriptor = GetComponentInParent<VRCAvatarDescriptor>();
+                if (_avatarDescriptor == null)
                 {
-                    _avatarAnimator = avatarDescriptor.GetComponent<Animator>();
+                    _avatarDescriptor = FindObjectOfType<VRCAvatarDescriptor>();
+                }
+                
+                if (_avatarDescriptor != null)
+                {
+                    _avatarAnimator = _avatarDescriptor.GetComponent<Animator>();
                 }
             }
 #endif
@@ -237,10 +253,14 @@ namespace ReactiveAuraFX.Core
             if (useAnimatorEmotionDetection && _avatarAnimator != null)
             {
                 UpdateEmotionFromAnimator();
+                UpdateEffectEnabledFromAnimator();
             }
 #endif
             
-            UpdateAuraEffect();
+            if (_effectEnabled)
+            {
+                UpdateAuraEffect();
+            }
         }
 
 #if MA_VRCSDK3_AVATARS
@@ -248,6 +268,21 @@ namespace ReactiveAuraFX.Core
         {
             try
             {
+                if (_avatarAnimator.parameters == null) return;
+                
+                // パラメータの存在チェック
+                bool paramExists = false;
+                foreach (var param in _avatarAnimator.parameters)
+                {
+                    if (param.name == emotionParameterName)
+                    {
+                        paramExists = true;
+                        break;
+                    }
+                }
+                
+                if (!paramExists) return;
+                
                 int emotionValue = _avatarAnimator.GetInteger(emotionParameterName);
                 
                 if (emotionValue != _lastEmotionParameterValue)
@@ -263,6 +298,39 @@ namespace ReactiveAuraFX.Core
                             break;
                         }
                     }
+                }
+            }
+            catch (System.Exception)
+            {
+                // パラメータが存在しない場合は無視
+            }
+        }
+
+        private void UpdateEffectEnabledFromAnimator()
+        {
+            try
+            {
+                if (_avatarAnimator.parameters == null) return;
+                
+                // エフェクト有効化パラメータの存在チェック
+                bool paramExists = false;
+                foreach (var param in _avatarAnimator.parameters)
+                {
+                    if (param.name == enableParameterName)
+                    {
+                        paramExists = true;
+                        break;
+                    }
+                }
+                
+                if (!paramExists) return;
+                
+                bool effectEnabled = _avatarAnimator.GetBool(enableParameterName);
+                
+                if (effectEnabled != _lastEffectEnabledValue)
+                {
+                    _lastEffectEnabledValue = effectEnabled;
+                    SetEffectEnabled(effectEnabled);
                 }
             }
             catch (System.Exception)
@@ -401,6 +469,8 @@ namespace ReactiveAuraFX.Core
         /// </summary>
         public void SetEffectEnabled(bool enabled)
         {
+            _effectEnabled = enabled;
+            
             if (auraParticles != null)
             {
                 if (enabled)
@@ -430,5 +500,53 @@ namespace ReactiveAuraFX.Core
         {
             animationSpeed = Mathf.Clamp(speed, 0.1f, 5f);
         }
+
+#if MA_VRCSDK3_AVATARS
+        /// <summary>
+        /// Modular Avatar統合のセットアップ
+        /// </summary>
+        [ContextMenu("Modular Avatar統合セットアップ")]
+        public void SetupModularAvatarIntegration()
+        {
+            if (_avatarDescriptor == null)
+            {
+                _avatarDescriptor = GetComponentInParent<VRCAvatarDescriptor>();
+                if (_avatarDescriptor == null)
+                {
+                    _avatarDescriptor = FindObjectOfType<VRCAvatarDescriptor>();
+                }
+            }
+            
+            if (_avatarDescriptor != null)
+            {
+                _avatarAnimator = _avatarDescriptor.GetComponent<Animator>();
+                Debug.Log("[ReactiveAuraFX] EmotionAura Modular Avatar統合完了");
+            }
+            else
+            {
+                Debug.LogWarning("[ReactiveAuraFX] VRCAvatarDescriptorが見つかりません");
+            }
+        }
+
+        /// <summary>
+        /// 表情マッピングをリセット
+        /// </summary>
+        [ContextMenu("表情マッピングをリセット")]
+        public void ResetEmotionMappings()
+        {
+            emotionMappings = new EmotionValueMapping[]
+            {
+                new EmotionValueMapping { emotionType = EmotionType.Neutral, parameterValue = 0 },
+                new EmotionValueMapping { emotionType = EmotionType.Happy, parameterValue = 1 },
+                new EmotionValueMapping { emotionType = EmotionType.Love, parameterValue = 2 },
+                new EmotionValueMapping { emotionType = EmotionType.Shy, parameterValue = 3 },
+                new EmotionValueMapping { emotionType = EmotionType.Angry, parameterValue = 4 },
+                new EmotionValueMapping { emotionType = EmotionType.Sad, parameterValue = 5 },
+                new EmotionValueMapping { emotionType = EmotionType.Excited, parameterValue = 6 },
+                new EmotionValueMapping { emotionType = EmotionType.Calm, parameterValue = 7 }
+            };
+            Debug.Log("[ReactiveAuraFX] 表情マッピングがリセットされました");
+        }
+#endif
     }
 } 

@@ -1,6 +1,6 @@
 // EyeFocusRay - 視線フォーカスビーム
 // Reactive Aura FX サブシステム
-// VRChat + Modular Avatar対応
+// VRChat + Modular Avatar完全対応
 
 using UnityEngine;
 using System.Collections;
@@ -10,11 +10,15 @@ using VRC.SDK3.Avatars.Components;
 using VRC.SDK3.Avatars.ScriptableObjects;
 #endif
 
+#if MA_VRCSDK3_AVATARS
+using nadena.dev.modular_avatar.core;
+#endif
+
 namespace ReactiveAuraFX.Core
 {
     /// <summary>
     /// 視線がオブジェクトにフォーカスしたときに細いビーム状光を出すエフェクト
-    /// VRChat Avatar 3.0対応、AutoFIX安全設計
+    /// VRChat Avatar 3.0 + Modular Avatar完全対応、AutoFIX安全設計
     /// </summary>
     [AddComponentMenu("ReactiveAuraFX/Effects/Eye Focus Ray Effect")]
     [System.Serializable]
@@ -69,16 +73,20 @@ namespace ReactiveAuraFX.Core
 
 #if MA_VRCSDK3_AVATARS
         [Space(10)]
-        [Header("🔗 Modular Avatar連携")]
+        [Header("🔗 Modular Avatar完全連携")]
         [Tooltip("Animatorパラメータで強制発動")]
         public bool useAnimatorForceBeam = false;
         
         [Tooltip("強制ビームパラメータ名")]
         public string forceBeamParameterName = "EyeBeamForce";
+        
+        [Tooltip("エフェクト有効化パラメータ名")]
+        public string enableParameterName = "ReactiveAuraFX/EyeFocusRay";
 #endif
 
         // === 内部変数 ===
         private bool _isGazing = false;
+        private bool _effectEnabled = true;
         private float _gazeStartTime = 0f;
         private Vector3 _gazeDirection = Vector3.forward;
         private GameObject _focusedObject = null;
@@ -92,6 +100,14 @@ namespace ReactiveAuraFX.Core
         // パーティクル制御
         private ParticleSystem.MainModule _particleMain;
         private ParticleSystem.EmissionModule _particleEmission;
+
+#if MA_VRCSDK3_AVATARS
+        // Modular Avatar関連
+        private Animator _avatarAnimator;
+        private VRCAvatarDescriptor _avatarDescriptor;
+        private bool _lastForceBeamValue = false;
+        private bool _lastEffectEnabledValue = true;
+#endif
 
         void Awake()
         {
@@ -189,6 +205,23 @@ namespace ReactiveAuraFX.Core
                 focusAudioSource.clip = focusClip;
                 focusAudioSource.loop = false;
             }
+
+#if MA_VRCSDK3_AVATARS
+            // Modular Avatar Animator検出
+            if (useAnimatorForceBeam && _avatarAnimator == null)
+            {
+                _avatarDescriptor = GetComponentInParent<VRCAvatarDescriptor>();
+                if (_avatarDescriptor == null)
+                {
+                    _avatarDescriptor = FindObjectOfType<VRCAvatarDescriptor>();
+                }
+                
+                if (_avatarDescriptor != null)
+                {
+                    _avatarAnimator = _avatarDescriptor.GetComponent<Animator>();
+                }
+            }
+#endif
             
             Debug.Log("[ReactiveAuraFX] EyeFocusRayEffect初期化完了");
         }
@@ -222,9 +255,98 @@ namespace ReactiveAuraFX.Core
 
         void Update()
         {
-            UpdateGazeDetection();
-            UpdateBeamEffect();
+#if MA_VRCSDK3_AVATARS
+            // Modular Avatar パラメータ監視
+            if (useAnimatorForceBeam && _avatarAnimator != null)
+            {
+                UpdateAnimatorForceBeam();
+            }
+            
+            if (_avatarAnimator != null)
+            {
+                UpdateEffectEnabledFromAnimator();
+            }
+#endif
+            
+            if (_effectEnabled)
+            {
+                UpdateGazeDetection();
+                UpdateBeamEffect();
+            }
         }
+
+#if MA_VRCSDK3_AVATARS
+        private void UpdateAnimatorForceBeam()
+        {
+            try
+            {
+                if (_avatarAnimator.parameters == null) return;
+                
+                // パラメータの存在チェック
+                bool paramExists = false;
+                foreach (var param in _avatarAnimator.parameters)
+                {
+                    if (param.name == forceBeamParameterName)
+                    {
+                        paramExists = true;
+                        break;
+                    }
+                }
+                
+                if (!paramExists) return;
+                
+                bool forceBeamValue = _avatarAnimator.GetBool(forceBeamParameterName);
+                
+                if (forceBeamValue && !_lastForceBeamValue)
+                {
+                    ForceActivateBeam();
+                }
+                else if (!forceBeamValue && _lastForceBeamValue)
+                {
+                    DeactivateBeam();
+                }
+                
+                _lastForceBeamValue = forceBeamValue;
+            }
+            catch (System.Exception)
+            {
+                // パラメータが存在しない場合は無視
+            }
+        }
+
+        private void UpdateEffectEnabledFromAnimator()
+        {
+            try
+            {
+                if (_avatarAnimator.parameters == null) return;
+                
+                // エフェクト有効化パラメータの存在チェック
+                bool paramExists = false;
+                foreach (var param in _avatarAnimator.parameters)
+                {
+                    if (param.name == enableParameterName)
+                    {
+                        paramExists = true;
+                        break;
+                    }
+                }
+                
+                if (!paramExists) return;
+                
+                bool effectEnabled = _avatarAnimator.GetBool(enableParameterName);
+                
+                if (effectEnabled != _lastEffectEnabledValue)
+                {
+                    _lastEffectEnabledValue = effectEnabled;
+                    SetEffectEnabled(effectEnabled);
+                }
+            }
+            catch (System.Exception)
+            {
+                // パラメータが存在しない場合は無視
+            }
+        }
+#endif
 
         private void UpdateGazeDetection()
         {
@@ -328,7 +450,7 @@ namespace ReactiveAuraFX.Core
 
         private void ActivateBeam()
         {
-            if (_beamActive) return;
+            if (_beamActive || !_effectEnabled) return;
             
             _beamActive = true;
             
@@ -364,6 +486,20 @@ namespace ReactiveAuraFX.Core
             
             Debug.Log("[ReactiveAuraFX] EyeFocusBeam発動");
         }
+
+#if MA_VRCSDK3_AVATARS
+        /// <summary>
+        /// Animatorから強制的にビームを発動
+        /// </summary>
+        public void ForceActivateBeam()
+        {
+            if (!_effectEnabled) return;
+            
+            _beamStartPos = GetGazeOrigin();
+            _beamEndPos = _beamStartPos + GetGazeDirection() * rayLength;
+            ActivateBeam();
+        }
+#endif
 
         private void DeactivateBeam()
         {
@@ -425,6 +561,19 @@ namespace ReactiveAuraFX.Core
         }
 
         /// <summary>
+        /// エフェクトの有効/無効を切り替え
+        /// </summary>
+        public void SetEffectEnabled(bool enabled)
+        {
+            _effectEnabled = enabled;
+            
+            if (!enabled && _beamActive)
+            {
+                DeactivateBeam();
+            }
+        }
+
+        /// <summary>
         /// ビームの色を設定
         /// </summary>
         public void SetBeamColor(Color color)
@@ -462,6 +611,34 @@ namespace ReactiveAuraFX.Core
         {
             rayLength = Mathf.Clamp(length, 1f, 10f);
         }
+
+#if MA_VRCSDK3_AVATARS
+        /// <summary>
+        /// Modular Avatar統合のセットアップ
+        /// </summary>
+        [ContextMenu("Modular Avatar統合セットアップ")]
+        public void SetupModularAvatarIntegration()
+        {
+            if (_avatarDescriptor == null)
+            {
+                _avatarDescriptor = GetComponentInParent<VRCAvatarDescriptor>();
+                if (_avatarDescriptor == null)
+                {
+                    _avatarDescriptor = FindObjectOfType<VRCAvatarDescriptor>();
+                }
+            }
+            
+            if (_avatarDescriptor != null)
+            {
+                _avatarAnimator = _avatarDescriptor.GetComponent<Animator>();
+                Debug.Log("[ReactiveAuraFX] EyeFocusRay Modular Avatar統合完了");
+            }
+            else
+            {
+                Debug.LogWarning("[ReactiveAuraFX] VRCAvatarDescriptorが見つかりません");
+            }
+        }
+#endif
 
         void OnDestroy()
         {

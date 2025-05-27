@@ -1,0 +1,63 @@
+VRChat統合手順書
+==================
+
+## 手動でスクリプトコンポーネントを追加する手順
+
+### 1. ReactiveAuraFX_Systemオブジェクトに以下のスクリプトを追加：
+
+1. **ReactiveAuraFXSystem.cs**
+   - メインのシステム制御スクリプト
+   - 感情状態の管理
+   - エフェクトの統合制御
+
+2. **ReactiveAuraFXInstaller.cs**
+   - VRChatアバターへの自動インストール機能
+   - アニメーターコントローラーとの統合
+
+### 2. 各エフェクトオブジェクトに以下のスクリプトを追加：
+
+1. **EmotionAura_Effect** → EmotionAuraEffect.cs
+2. **HeartbeatGlow_Effect** → HeartbeatGlowEffect.cs
+3. **EyeFocusRay_Effect** → EyeFocusRayEffect.cs
+4. **LovePulse_Effect** → LovePulseEffect.cs
+5. **IdleBloom_Effect** → IdleBloomEffect.cs
+
+### 3. VRChatアバターディスクリプター設定：
+
+1. アバターのルートオブジェクトにVRC Avatar Descriptor追加
+2. 以下のパラメーターを Expression Parameters に追加：
+   - EmotionState (Int, 0-4)
+   - LoveLevel (Float, 0-1)
+   - FocusIntensity (Float, 0-1)
+   - HeartRate (Int, 60-120)
+   - IdleMode (Bool)
+
+### 4. アニメーターコントローラー設定：
+
+1. FXアニメーターレイヤーに新規レイヤー "ReactiveAuraFX" 追加
+2. パラメーター同期設定
+3. 状態遷移設定
+
+### 5. 手動コンポーネント割り当て：
+
+ReactiveAuraFXSystem.cs のInspector上で以下を設定：
+- Emotion Aura Effect → EmotionAura_Effect
+- Heartbeat Glow Effect → HeartbeatGlow_Effect  
+- Eye Focus Ray Effect → EyeFocusRay_Effect
+- Love Pulse Effect → LovePulse_Effect
+- Idle Bloom Effect → IdleBloom_Effect
+- Left Eye Reference → LeftEyeReference
+- Right Eye Reference → RightEyeReference
+- Head Reference → HeadReference
+
+### 6. マテリアル割り当て：
+
+以下のマテリアルを対応するオブジェクトに適用：
+- AuraParticle.mat → EmotionAura ParticleSystem
+- HeartbeatRipple.mat → HeartbeatRipple オブジェクト群
+- EyeBeam.mat → EyeFocusBeam LineRenderer
+- FlowerPetal.mat → IdleFlower オブジェクト群
+- LoveParticle.mat → LovePulse ParticleSystem
+- FocusParticle.mat → FocusParticles ParticleSystem
+
+注意: コンパイルエラーを避けるため、スクリプトの追加は手動で行ってください。 
