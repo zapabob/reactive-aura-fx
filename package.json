@@ -1,0 +1,57 @@
+{
+  "name": "com.vrchat.reactive-aura-fx",
+  "displayName": "Reactive Aura FX - 魅力拡張アバター",
+  "version": "1.0.0",
+  "unity": "2022.3",
+  "description": "VRChatアバター向け魅力的エフェクトシステム。表情・視線・動作に連動してリアルタイムでエフェクトを発動し、自己表現力と没入感を向上させます。",
+  "keywords": [
+    "VRChat",
+    "Avatar",
+    "Effects",
+    "Aura",
+    "ModularAvatar",
+    "VRC SDK3",
+    "魅力拡張",
+    "エフェクト",
+    "表情連動",
+    "視線追跡",
+    "パーティクル"
+  ],
+  "author": {
+    "name": "ReactiveAuraFX Team",
+    "email": "support@reactive-aura-fx.com",
+    "url": "https://github.com/your-repo/ReactiveAuraFX"
+  },
+  "vrcGetDependencies": {
+    "com.vrchat.avatars": "3.5.0",
+    "com.vrchat.base": "3.5.0"
+  },
+  "gitDependencies": {
+    "nadena.dev.modular-avatar": "https://github.com/bdunderscore/modular-avatar.git"
+  },
+  "dependencies": {
+    "com.unity.mathematics": "1.2.6",
+    "com.unity.render-pipelines.universal": "14.0.9"
+  },
+  "samples": [
+    {
+      "displayName": "Basic Setup Examples",
+      "description": "基本的なセットアップ例",
+      "path": "Samples~/BasicSetup"
+    },
+    {
+      "displayName": "Modular Avatar Integration",
+      "description": "Modular Avatar完全統合サンプル",
+      "path": "Samples~/ModularAvatarIntegration"
+    },
+    {
+      "displayName": "Custom Effect Templates",
+      "description": "カスタムエフェクトテンプレート",
+      "path": "Samples~/CustomEffects"
+    }
+  ],
+  "documentationUrl": "https://github.com/your-repo/ReactiveAuraFX/wiki",
+  "changelogUrl": "https://github.com/your-repo/ReactiveAuraFX/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/your-repo/ReactiveAuraFX/blob/main/LICENSE",
+  "type": "tool"
+} 
